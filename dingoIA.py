@@ -14,12 +14,12 @@ def install_deps():
         except ImportError:
             print(f"[Dingo IA] Instalando {dep}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", dep, "-q"])
-            print(f"[Dingo IA] {dep} instalado com sucesso!")
+            print(f"[Dingo IA] {dep} instalado!")
 
 install_deps()
 
 # ─────────────────────────────────────────────────────────
-# IMPORTS (após garantir instalação)
+# IMPORTS
 # ─────────────────────────────────────────────────────────
 import asyncio
 from time import sleep
@@ -40,12 +40,12 @@ console = Console()
 # ─────────────────────────────────────────────────────────
 # CONFIGURAÇÕES
 # ─────────────────────────────────────────────────────────
-OLLAMA_MODEL    = "qwen2.5:7b"
-OLLAMA_API_URL  = "http://localhost:11434"
-NOTION_API_KEY  = os.environ.get("NOTION_API_KEY", "")
-GMAIL_CREDS     = os.environ.get("GMAIL_CREDENTIALS", "credentials.json")
+OLLAMA_MODEL   = "qwen2.5:7b"
+OLLAMA_API_URL = "http://localhost:11434"
+NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+GMAIL_CREDS    = os.environ.get("GMAIL_CREDENTIALS", "credentials.json")
 
-ollama_process  = None
+ollama_process = None
 
 # ─────────────────────────────────────────────────────────
 # ASCII ART
@@ -66,11 +66,10 @@ async def ensure_ollama(model: str = OLLAMA_MODEL):
     global ollama_process
     tags_url = f"{OLLAMA_API_URL}/api/tags"
 
-    # 1. Checa se já está rodando
     try:
         resp = requests.get(tags_url, timeout=2)
         if resp.status_code == 200:
-            console.print(f"[green]✅ Ollama já está rodando![/]")
+            console.print("[green]✅ Ollama já está rodando![/]")
             modelos = [m["name"] for m in resp.json().get("models", [])]
             if not any(model in m for m in modelos):
                 console.print(f"[yellow]📥 Baixando modelo {model}... (aguarde)[/]")
@@ -79,7 +78,6 @@ async def ensure_ollama(model: str = OLLAMA_MODEL):
     except:
         pass
 
-    # 2. Inicia Ollama serve em background
     console.print("[bold blue]🚀 Iniciando Ollama serve em background...[/]")
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     ollama_process = subprocess.Popen(
@@ -89,14 +87,12 @@ async def ensure_ollama(model: str = OLLAMA_MODEL):
         creationflags=flags
     )
 
-    # 3. Aguarda ficar pronto (até 30s)
     console.print("[bold yellow]⏳ Aguardando Ollama iniciar...[/]")
-    for i in track(range(30), description="Conectando ao Ollama..."):
+    for _ in track(range(30), description="Conectando ao Ollama..."):
         try:
             resp = requests.get(tags_url, timeout=1)
             if resp.status_code == 200:
                 console.print("[green]✅ Ollama pronto![/]")
-                # 4. Baixa modelo se não tiver
                 modelos = [m["name"] for m in resp.json().get("models", [])]
                 if not any(model in m for m in modelos):
                     console.print(f"[yellow]📥 Baixando modelo {model}... (aguarde)[/]")
@@ -113,7 +109,8 @@ async def ensure_ollama(model: str = OLLAMA_MODEL):
 # BOOT ANIMATION
 # ─────────────────────────────────────────────────────────
 async def boot_animation():
-    os.system("title Dingo IA - Ollama MCP Agent" if os.name == "nt" else "")
+    if os.name == "nt":
+        os.system("title Dingo IA - Ollama MCP Agent")
     console.clear()
 
     await ensure_ollama()
@@ -145,7 +142,7 @@ async def call_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:
         "options": {"temperature": 0.7}
     }
     try:
-        with console.status(f"[bold green]Dingo pensando... 🧠[/]"):
+        with console.status("[bold green]Dingo pensando... 🧠[/]"):
             resp = requests.post(url, json=data, timeout=120)
             if resp.status_code == 404:
                 return f"⚠️ Modelo '{model}' não encontrado. Rode: ollama pull {model}"
@@ -167,9 +164,9 @@ async def run_mcp_tool(tool: str, args: str) -> str:
     env["GMAIL_CREDENTIALS"] = GMAIL_CREDS
 
     cmds = {
-        "notion":     ["npx", "-y", "@notionhq/notion-mcp-server", args],
-        "filesystem": ["npx", "-y", "@modelcontextprotocol/server-filesystem", args],
-        "gmail":      ["npx", "-y", "@gcp-mcp/gmail-mcp-server", args],
+        "notion":     f"npx -y @notionhq/notion-mcp-server {args}",
+        "filesystem": f"npx -y @modelcontextprotocol/server-filesystem {args}",
+        "gmail":      f"npx -y @gcp-mcp/gmail-mcp-server {args}",
     }
 
     if tool not in cmds:
@@ -181,11 +178,10 @@ async def run_mcp_tool(tool: str, args: str) -> str:
             capture_output=True,
             text=True,
             timeout=60,
-            env=env
+            env=env,
+            shell=True  # herda PATH do Windows corretamente
         )
         return proc.stdout or proc.stderr or "MCP retornou vazio."
-    except FileNotFoundError:
-        return "❌ npx não encontrado. Instale Node.js: https://nodejs.org"
     except subprocess.TimeoutExpired:
         return "⏱️ MCP timeout. Tente novamente."
     except Exception as e:
@@ -217,10 +213,10 @@ async def main():
         # Listar MCPs
         if user_input.startswith("/tools"):
             rprint(Panel(
-                "[green]/notion[/] [white]<texto>[/]    → Cria/busca no Notion\n"
-                "[green]/fs[/]     [white]<caminho>[/]   → Gerencia arquivos\n"
-                "[green]/gmail[/]  [white]<texto>[/]    → Acessa Gmail\n"
-                "[green]/model[/]  [white]<nome>[/]     → Troca modelo Ollama",
+                "[green]/notion[/]  [white]<texto>[/]    → Cria/busca no Notion\n"
+                "[green]/fs[/]      [white]<caminho>[/]  → Gerencia arquivos\n"
+                "[green]/gmail[/]   [white]<texto>[/]    → Acessa Gmail\n"
+                "[green]/model[/]   [white]<nome>[/]     → Troca modelo Ollama",
                 title="[bold]🛠 MCPs Disponíveis[/]",
                 border_style="cyan"
             ))
@@ -228,9 +224,9 @@ async def main():
 
         # Trocar modelo
         if user_input.startswith("/model "):
-            novo_modelo = user_input.split(" ", 1)[1]
-            OLLAMA_MODEL_ATUAL = novo_modelo
-            console.print(f"[green]✅ Modelo trocado para: {novo_modelo}[/]")
+            global OLLAMA_MODEL
+            OLLAMA_MODEL = user_input.split(" ", 1)[1].strip()
+            console.print(f"[green]✅ Modelo trocado para: {OLLAMA_MODEL}[/]")
             continue
 
         # MCP Notion
@@ -254,7 +250,7 @@ async def main():
             rprint(Panel(escape(result), title="[blue]📧 Gmail MCP[/]", border_style="blue"))
             continue
 
-        # Chat normal com Ollama
+        # Chat normal Ollama
         response = await call_ollama(user_input)
         rprint(Panel(
             escape(response),
